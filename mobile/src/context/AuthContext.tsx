@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authService } from '../services/authService';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { AuthState } from '../types';
 
 interface AuthContextType extends AuthState {
@@ -11,64 +10,49 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  // MVP: Bypass authentication - always authenticated
   const [state, setState] = useState<AuthState>({
-    token: null,
-    userId: null,
-    isLoading: true,
-    isAuthenticated: false,
+    token: 'mvp-bypass-token',
+    userId: 'mvp-user',
+    isLoading: false,
+    isAuthenticated: true,
   });
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const { token, userId } = await authService.getStoredAuth();
-      setState({
-        token,
-        userId,
-        isLoading: false,
-        isAuthenticated: !!token,
-      });
-    } catch {
-      setState({
-        token: null,
-        userId: null,
-        isLoading: false,
-        isAuthenticated: false,
-      });
-    }
-  };
-
-  const login = async (email: string, password: string) => {
-    const { token, userId } = await authService.login(email, password);
+  const login = async (_email: string, _password: string) => {
     setState({
-      token,
-      userId,
+      token: 'mvp-bypass-token',
+      userId: 'mvp-user',
       isLoading: false,
       isAuthenticated: true,
     });
   };
 
-  const signup = async (email: string, password: string) => {
-    const { token, userId } = await authService.signup(email, password);
+  const signup = async (_email: string, _password: string) => {
     setState({
-      token,
-      userId,
+      token: 'mvp-bypass-token',
+      userId: 'mvp-user',
       isLoading: false,
       isAuthenticated: true,
     });
   };
 
   const logout = async () => {
-    await authService.logout();
+    // MVP: Just reload to "login" again
     setState({
       token: null,
       userId: null,
       isLoading: false,
       isAuthenticated: false,
     });
+    // Re-authenticate immediately for MVP
+    setTimeout(() => {
+      setState({
+        token: 'mvp-bypass-token',
+        userId: 'mvp-user',
+        isLoading: false,
+        isAuthenticated: true,
+      });
+    }, 100);
   };
 
   return (

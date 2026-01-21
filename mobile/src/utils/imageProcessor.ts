@@ -1,22 +1,15 @@
-import * as ImageManipulator from 'expo-image-manipulator';
+// Image compression utility
+// MVP: Using expo-image-picker's built-in compression (quality: 0.7)
+// Post-MVP: Install expo-image-manipulator for more control
 
 export async function compressImage(
   uri: string,
-  maxWidth: number = 1024
+  _maxWidth: number = 1024
 ): Promise<{ uri: string; base64: string }> {
-  const result = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: maxWidth } }],
-    {
-      compress: 0.7,
-      format: ImageManipulator.SaveFormat.JPEG,
-      base64: true,
-    }
-  );
-
+  // For MVP, return uri as-is since we use expo-image-picker's compression
   return {
-    uri: result.uri,
-    base64: result.base64 || '',
+    uri,
+    base64: '',
   };
 }
 

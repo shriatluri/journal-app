@@ -23,13 +23,13 @@ Users write/upload a journal entry. AI analyzes it against their stated growth g
 
 ## Technical Stack
 
-### Frontend
-- **Framework**: React Native with Expo (managed workflow)
-- **Language**: TypeScript
-- **UI Library**: React Native Paper (Material Design components)
-- **Navigation**: React Navigation v6
-- **State Management**: React Context API (sufficient for MVP)
-- **HTTP Client**: Axios
+### Frontend (iOS)
+- **Framework**: SwiftUI
+- **Language**: Swift 5.9+
+- **UI Components**: Native SwiftUI components
+- **Navigation**: NavigationStack (iOS 16+)
+- **State Management**: @Observable / @State / @Environment (Swift Observation framework)
+- **HTTP Client**: URLSession with async/await
 
 ### Backend
 - **API Framework**: Flask (Python 3.11+)
@@ -49,10 +49,11 @@ Users write/upload a journal entry. AI analyzes it against their stated growth g
   - Vision API for OCR
 
 ### Development Tools
-- **Mobile Preview**: Expo Go app (iOS/Android)
+- **IDE**: Xcode 15+
+- **Mobile Preview**: iOS Simulator / Physical device
 - **API Testing**: Postman or Thunder Client
 - **Database GUI**: MongoDB Compass
-- **Deployment**: Expo EAS Build (mobile), Railway/Render (backend)
+- **Deployment**: Xcode Cloud or App Store Connect (mobile), Railway/Render (backend)
 - **Version Control**: Git + GitHub
 
 ## Data Models (MongoDB)
@@ -582,119 +583,167 @@ def get_entry(entry_id):
     return jsonify(entry.to_dict()), 200
 ```
 
-## Mobile App Architecture
+## Mobile App Architecture (iOS/Swift)
 
 ### App Structure
 ```
-mobile/
-├── App.tsx                     # Root component
-├── app.json                    # Expo configuration
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── navigation/
-│   │   └── RootNavigator.tsx   # Stack navigation
-│   ├── screens/
-│   │   ├── OnboardingScreen.tsx
-│   │   ├── AuthScreen.tsx      # Login/Signup
-│   │   ├── HomeScreen.tsx      # Timeline of entries
-│   │   ├── NewEntryScreen.tsx  # Create entry
-│   │   ├── ProcessingScreen.tsx
-│   │   └── GrowthNoteScreen.tsx
-│   ├── components/
-│   │   ├── GrowthNoteCard.tsx
-│   │   ├── GrowthAreaBadge.tsx
-│   │   ├── CameraCapture.tsx
-│   │   └── LoadingSpinner.tsx
-│   ├── services/
-│   │   ├── api.ts              # Axios instance with auth
-│   │   ├── authService.ts      # Login/signup/token management
-│   │   └── journalService.ts   # Journal CRUD operations
-│   ├── context/
-│   │   ├── AuthContext.tsx     # User auth state
-│   │   └── JournalContext.tsx  # Journal entries state
-│   ├── types/
-│   │   └── index.ts            # TypeScript interfaces
-│   ├── utils/
-│   │   ├── storage.ts          # AsyncStorage helpers
-│   │   └── imageProcessor.ts   # Image compression
-│   └── constants/
-│       ├── colors.ts
-│       └── config.ts           # API base URL
+JournalGrowth/
+├── JournalGrowthApp.swift          # App entry point
+├── Info.plist
+├── Assets.xcassets/
+├── Models/
+│   ├── User.swift                  # User model
+│   ├── JournalEntry.swift          # Journal entry model
+│   ├── GrowthNote.swift            # Growth note model
+│   └── GrowthArea.swift            # Growth area model
+├── Views/
+│   ├── ContentView.swift           # Root view with navigation
+│   ├── Auth/
+│   │   ├── AuthView.swift          # Login/Signup container
+│   │   ├── LoginView.swift
+│   │   └── SignupView.swift
+│   ├── Home/
+│   │   ├── HomeView.swift          # Timeline of entries
+│   │   └── EntryRowView.swift      # Individual entry in list
+│   ├── Entry/
+│   │   ├── NewEntryView.swift      # Create entry
+│   │   ├── ProcessingView.swift    # Loading state
+│   │   └── GrowthNoteView.swift    # Display analysis
+│   └── Components/
+│       ├── GrowthNoteCard.swift
+│       ├── GrowthAreaBadge.swift
+│       ├── CameraView.swift
+│       └── LoadingSpinner.swift
+├── Services/
+│   ├── APIClient.swift             # URLSession networking
+│   ├── AuthService.swift           # Login/signup/token management
+│   └── JournalService.swift        # Journal CRUD operations
+├── ViewModels/
+│   ├── AuthViewModel.swift         # Auth state management
+│   └── JournalViewModel.swift      # Journal entries state
+├── Utilities/
+│   ├── KeychainManager.swift       # Secure token storage
+│   └── ImageProcessor.swift        # Image compression
+└── Constants/
+    ├── Colors.swift
+    └── Config.swift                # API base URL
 ```
 
 ### API Service Layer
-```typescript
-// src/services/api.ts
+```swift
+// Services/APIClient.swift
 
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Foundation
 
-const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:5000/api' 
-  : 'https://your-app.railway.app/api';
+enum APIError: Error {
+    case invalidURL
+    case noData
+    case decodingError
+    case unauthorized
+    case serverError(String)
+}
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+actor APIClient {
+    static let shared = APIClient()
 
-// Add JWT token to requests
-apiClient.interceptors.request.use(
-  async (config) => {
-    const token = await AsyncStorage.getItem('authToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    #if DEBUG
+    private let baseURL = "http://localhost:5000/api"
+    #else
+    private let baseURL = "https://your-app.railway.app/api"
+    #endif
+
+    private init() {}
+
+    func request<T: Decodable>(
+        endpoint: String,
+        method: String = "GET",
+        body: Encodable? = nil
+    ) async throws -> T {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Add JWT token if available
+        if let token = KeychainManager.shared.getToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body = body {
+            request.httpBody = try JSONEncoder().encode(body)
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.serverError("Invalid response")
+        }
+
+        if httpResponse.statusCode == 401 {
+            KeychainManager.shared.deleteToken()
+            throw APIError.unauthorized
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.serverError("Status code: \(httpResponse.statusCode)")
+        }
+
+        return try JSONDecoder().decode(T.self, from: data)
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Handle 401 errors (token expired)
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      await AsyncStorage.removeItem('authToken');
-      // Navigate to login screen (handled in AuthContext)
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default apiClient;
+}
 ```
-```typescript
-// src/services/journalService.ts
+```swift
+// Services/JournalService.swift
 
-import apiClient from './api';
-import { JournalEntry, GrowthNote } from '../types';
+import Foundation
 
-export const journalService = {
-  async createEntry(text: string, imageBase64?: string): Promise<{ entryId: string; growthNote: GrowthNote }> {
-    const response = await apiClient.post('/journal/create', {
-      text,
-      image: imageBase64,
-    });
-    return response.data;
-  },
+struct CreateEntryRequest: Encodable {
+    let text: String
+    let image: String?
+}
 
-  async getEntries(limit: number = 10, skip: number = 0): Promise<{ entries: JournalEntry[]; total: number }> {
-    const response = await apiClient.get('/journal/list', {
-      params: { limit, skip },
-    });
-    return response.data;
-  },
+struct CreateEntryResponse: Decodable {
+    let entryId: String
+    let growthNote: GrowthNote
+    let message: String
+}
 
-  async getEntry(entryId: string): Promise<JournalEntry> {
-    const response = await apiClient.get(`/journal/${entryId}`);
-    return response.data;
-  },
-};
+struct EntriesListResponse: Decodable {
+    let entries: [JournalEntry]
+    let total: Int
+    let limit: Int
+    let skip: Int
+}
+
+actor JournalService {
+    static let shared = JournalService()
+
+    private init() {}
+
+    func createEntry(text: String, imageBase64: String? = nil) async throws -> CreateEntryResponse {
+        let body = CreateEntryRequest(text: text, image: imageBase64)
+        return try await APIClient.shared.request(
+            endpoint: "/journal/create",
+            method: "POST",
+            body: body
+        )
+    }
+
+    func getEntries(limit: Int = 10, skip: Int = 0) async throws -> EntriesListResponse {
+        return try await APIClient.shared.request(
+            endpoint: "/journal/list?limit=\(limit)&skip=\(skip)"
+        )
+    }
+
+    func getEntry(entryId: String) async throws -> JournalEntry {
+        return try await APIClient.shared.request(
+            endpoint: "/journal/\(entryId)"
+        )
+    }
+}
 ```
 
 ## UI/UX Design Principles
@@ -742,26 +791,26 @@ export const journalService = {
 - Build `/journal/analyze` endpoint
 - Handle error cases (API failures, rate limits)
 
-### Week 2: Mobile App
+### Week 2: Mobile App (iOS/Swift)
 **Days 8-9**: Mobile Setup & Auth
-- Initialize Expo project with TypeScript
-- Set up React Navigation
-- Build Auth screens (login/signup)
-- Implement AuthContext with token storage
-- Connect to Flask backend
+- Create new Xcode project with SwiftUI
+- Set up NavigationStack and app structure
+- Build Auth views (LoginView/SignupView)
+- Implement AuthViewModel with Keychain token storage
+- Connect to Flask backend with APIClient
 
 **Days 10-11**: Journal Flow
-- Build NewEntryScreen (text input)
-- Build ProcessingScreen (loading state)
-- Build GrowthNoteScreen (display analysis)
-- Wire up API calls to backend
+- Build NewEntryView (text input)
+- Build ProcessingView (loading state)
+- Build GrowthNoteView (display analysis)
+- Wire up API calls to backend with async/await
 
 **Days 12-14**: Timeline & Polish
-- Build HomeScreen with entry list
-- Add pull-to-refresh
-- Integrate expo-image-picker for camera
+- Build HomeView with entry list
+- Add pull-to-refresh with .refreshable modifier
+- Integrate PhotosPicker for camera/photo library
 - Add image upload to S3/GridFS
-- End-to-end testing on physical devices
+- End-to-end testing on Simulator and physical devices
 - Bug fixes and performance optimization
 
 ## Success Metrics (MVP Validation)
@@ -869,22 +918,25 @@ python app.py
 # Server runs on http://localhost:5000
 ```
 
-### Mobile Setup
+### iOS App Setup
 ```bash
-# Navigate to mobile directory
-cd journal-tracker/mobile
+# Open Xcode project
+cd journal-tracker/JournalGrowth
+open JournalGrowth.xcodeproj
 
-# Install dependencies
-npm install
+# Configure API URL in Constants/Config.swift
+# For development, the app uses localhost:5000
+# For production, update the baseURL in APIClient.swift
 
-# Set environment variables
-# Create .env file:
-API_BASE_URL=http://localhost:5000/api  # or production URL
+# Build and run on Simulator
+# - Select target device (iPhone 15 Pro recommended)
+# - Press Cmd+R to build and run
 
-# Start Expo development server
-npx expo start
-
-# Scan QR code with Expo Go app on phone
+# Run on physical device
+# - Connect device via USB
+# - Select device from target dropdown
+# - Ensure signing team is configured in project settings
+# - Press Cmd+R to build and run
 ```
 
 ### Testing the Full Flow
@@ -892,12 +944,12 @@ npx expo start
 # 1. Start backend
 cd backend && python app.py
 
-# 2. Start mobile app
-cd mobile && npx expo start
+# 2. Open iOS app in Xcode and run on Simulator
+#    - Simulator should connect to localhost:5000
 
 # 3. Test authentication
 #    - Sign up with email/password
-#    - Login and receive JWT token
+#    - Login and receive JWT token (stored in Keychain)
 
 # 4. Test journal creation
 #    - Create text entry
@@ -913,13 +965,20 @@ cd mobile && npx expo start
 
 **Development**:
 - Backend: `.env` file (gitignored)
-- Mobile: `.env` file + `expo-constants` to access
+- iOS: Use `#if DEBUG` compiler flags in Config.swift for dev/prod URLs
 
 **Production**:
 - Backend: Railway/Render environment variables
-- Mobile: Expo Secrets (for EAS builds)
-```bash
-  eas secret:create --scope project --name API_BASE_URL --value https://your-app.railway.app/api
+- iOS: Use Xcode Cloud environment variables or xcconfig files for build-time configuration
+```swift
+// Example Config.swift
+enum Config {
+    #if DEBUG
+    static let apiBaseURL = "http://localhost:5000/api"
+    #else
+    static let apiBaseURL = "https://your-app.railway.app/api"
+    #endif
+}
 ```
 
 ## MongoDB Query Examples
@@ -976,8 +1035,8 @@ db.journalEntries.aggregate([
 
 ---
 
-**Document Version**: 2.0  
-**Last Updated**: January 2026  
-**Owner**: Shri  
-**Stack**: React Native + Flask + MongoDB + Gemini/GPT-4o-mini  
+**Document Version**: 2.1
+**Last Updated**: January 2026
+**Owner**: Shri
+**Stack**: SwiftUI (iOS) + Flask + MongoDB + Gemini/GPT-4o-mini
 **Status**: Ready for Development

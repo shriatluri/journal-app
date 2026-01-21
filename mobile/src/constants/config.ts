@@ -1,4 +1,4 @@
-const DEV_API_URL = 'http://localhost:5000/api';
+const DEV_API_URL = 'http://localhost:8000/api';
 const PROD_API_URL = 'https://your-app.railway.app/api';
 
 export const config = {
